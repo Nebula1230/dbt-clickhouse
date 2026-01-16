@@ -23,7 +23,7 @@ class ClickHousePythonExecutor:
         adapter: Any
     ) -> pd.DataFrame:
         """
-        Execute Python model code and return results as DataFrame. 
+        Execute Python model code and return results as DataFrame.
         
         Args:
             compiled_code: The compiled Python model code
@@ -64,7 +64,7 @@ class ClickHousePythonExecutor:
             output = json.loads(result.stdout)
             df = pd.DataFrame(output)
             
-            logger. info(f"Python model execution completed:  {len(df)} rows")
+            logger.info(f"Python model execution completed:  {len(df)} rows")
             return df
             
         except Exception as e:
@@ -80,7 +80,7 @@ class ClickHousePythonExecutor:
         connection:  Any
     ) -> None:
         """
-        Write DataFrame to ClickHouse table. 
+        Write DataFrame to ClickHouse table.
         
         Args:
             df: The DataFrame to materialize
@@ -136,7 +136,7 @@ class ClickHousePythonExecutor:
     
     def _pandas_to_clickhouse_type(self, pandas_dtype) -> str:
         """
-        Map pandas dtype to ClickHouse type. 
+        Map pandas dtype to ClickHouse type.
         """
         dtype_str = str(pandas_dtype)
         
@@ -165,7 +165,7 @@ class ClickHousePythonExecutor:
         connection: Any
     ) -> None:
         """
-        Insert DataFrame rows into ClickHouse table. 
+        Insert DataFrame rows into ClickHouse table.
         """
         # Convert DataFrame to list of tuples for insertion
         for _, row in df.iterrows():
@@ -182,7 +182,7 @@ class ClickHousePythonExecutor:
         if value is None:
             return 'NULL'
         elif isinstance(value, str):
-            return f"'{value. replace(chr(39), chr(39) + chr(39))}'"  # Escape quotes
+            return f"'{value.replace(chr(39), chr(39) + chr(39))}'"  # Escape quotes
         elif isinstance(value, bool):
             return '1' if value else '0'
         else:

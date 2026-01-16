@@ -1,14 +1,11 @@
 import csv
 import io
-import subprocess
-import tempfile
-import os
-import json
-import sys
 import pandas as pd
+import polars as pl
+from datetime import datetime, date
 from dataclasses import dataclass
 from dbt.adapters.clickhouse.python_executor import ClickHousePythonExecutor
-from dbt. adapters.capability import Capability
+from dbt.adapters.capability import Capability
 from multiprocessing.context import SpawnContext
 from typing import (
     TYPE_CHECKING,
@@ -33,9 +30,7 @@ from dbt.adapters.clickhouse.cache import ClickHouseRelationsCache
 from dbt.adapters.clickhouse.column import ClickHouseColumn, ClickHouseColumnChanges
 from dbt.adapters.clickhouse.connections import ClickHouseConnectionManager
 from dbt.adapters.clickhouse.errors import (
-    schema_change_datatype_error,
-    schema_change_fail_error,
-    schema_change_missing_source_error,
+    schema_change_fail_error
 )
 from dbt.adapters.clickhouse.logger import logger
 from dbt.adapters.clickhouse.query import quote_identifier
@@ -131,10 +126,7 @@ class ClickHouseAdapter(SQLAdapter):
     # In the ClickHouseAdapter class, add these methods: 
     @available
     def submit_python_job(self, model: dict, compiled_code: str, is_incremental: bool = False, target_relation = None) -> AdapterResponse:
-        """Execute Python model and materialize to ClickHouse"""
-        
-        import pandas as pd
-        
+        """Execute Python model and materialize to ClickHouse"""        
         # Extract model info
         schema = model.get('schema')
         identifier = model.get('alias')
@@ -164,7 +156,6 @@ class ClickHouseAdapter(SQLAdapter):
                     """Get reference to the current target table (for incremental)"""
                     if not self._is_incremental or not self.target_relation:
                         if self.return_type == 'polars':
-                            import polars as pl
                             return pl.DataFrame()
                         return pd.DataFrame()
                     
@@ -180,14 +171,12 @@ class ClickHouseAdapter(SQLAdapter):
                             df = pd.DataFrame(result, columns=columns)
                             
                             if self.return_type == 'polars':
-                                import polars as pl
                                 return pl.from_pandas(df)
                             return df
                     except:
                         pass
                     
                     if self.return_type == 'polars':
-                        import polars as pl
                         return pl.DataFrame()
                     return pd.DataFrame()
                 
@@ -324,7 +313,6 @@ class ClickHouseAdapter(SQLAdapter):
                         return df
                     
                     if self.return_type == 'polars':
-                        import polars as pl
                         return pl.DataFrame()
                     return pd.DataFrame()
                 
@@ -381,10 +369,7 @@ class ClickHouseAdapter(SQLAdapter):
     
     def _materialize_python_result(self, df, schema: str, table_name: str, drop_if_exists: bool = True) -> None:
         """Materialize Python result to ClickHouse table - supports both pandas and polars"""
-        
-        import pandas as pd
-        from datetime import datetime, date
-        
+                
         # Check if it's a Polars DataFrame and convert to Pandas
         if hasattr(df, '__class__') and 'polars' in str(type(df).__module__):
             df = df.to_pandas()
@@ -426,7 +411,7 @@ class ClickHouseAdapter(SQLAdapter):
         client = connection.handle
         
         # Batch insert
-        batch_size = 500
+        batch_size = 5000
         total_rows = len(df)
         
         print(f"📊 Inserting {total_rows} rows in batches of {batch_size}")
@@ -466,34 +451,7 @@ class ClickHouseAdapter(SQLAdapter):
                 print(f"   Inserted {min(i + batch_size, total_rows)}/{total_rows} rows")
         
         print(f"✅ Successfully inserted all {total_rows} rows")
-
-    def _batch_insert(self, client, schema: str, table_name: str, df):
-        """Helper method for batch insert"""
-        import pandas as pd
-        
-        # Insert in batches of 10000 rows
-        batch_size = 10000
-        for i in range(0, len(df), batch_size):
-            batch_df = df.iloc[i:i+batch_size]
-            
-            values_list = []
-            for _, row in batch_df.iterrows():
-                values = []
-                for v in row:
-                    if pd.isna(v):
-                        values.append('NULL')
-                    elif isinstance(v, str):
-                        escaped = v.replace("'", "''")
-                        values.append(f"'{escaped}'")
-                    elif isinstance(v, bool):
-                        values.append('1' if v else '0')
-                    else:
-                        values.append(str(v))
-                values_list.append(f"({', '.join(values)})")
-            
-            insert_sql = f"INSERT INTO `{schema}`.`{table_name}` VALUES {', '.join(values_list)}"
-            client.command(insert_sql)
-                
+                    
     @staticmethod
     def _pandas_to_ch_type(dtype):
         """Convert pandas dtype to ClickHouse type"""
@@ -519,11 +477,9 @@ class ClickHouseAdapter(SQLAdapter):
             return 'Date'
         else:
             return 'String'
-    def _append_to_table(self, df, schema: str, table_name: str) -> None:
-        """Append data to existing table"""
-        import pandas as pd
-        from datetime import datetime, date
         
+    def _append_to_table(self, df, schema: str, table_name: str) -> None:
+        """Append data to existing table"""        
         connection = self.connections.get_thread_connection()
         client = connection.handle
         
@@ -577,7 +533,7 @@ class ClickHouseAdapter(SQLAdapter):
         # ✅ Verify all unique key columns exist
         missing_cols = [col for col in unique_key_list if col not in df.columns]
         if missing_cols:
-            raise Exception(f"Unique key columns {missing_cols} not found in DataFrame. Available columns: {df.columns.tolist()}")
+            raise Exception(f"Unique key columns {missing_cols} not found in DataFrame.Available columns: {df.columns.tolist()}")
         
         print(f"\n{'='*60}")
         print(f"🔄 Delete+Insert Strategy (Python Model)")
@@ -764,7 +720,7 @@ class ClickHouseAdapter(SQLAdapter):
                     print(f"   ✅ All mutations completed (waited {waited}s)")
                 return
             
-            print(f"   ⏱️  {pending} mutation(s) still pending... ({waited}s elapsed)")
+            print(f"   ⏱️  {pending} mutation(s) still pending...({waited}s elapsed)")
             time.sleep(check_interval)
             waited += check_interval
         
@@ -797,7 +753,7 @@ class ClickHouseAdapter(SQLAdapter):
             for row in result[:5]:
                 print(f"   {row}")
             if len(result) > 5:
-                print(f"   ... and {len(result) - 5} more")
+                print(f"   ...and {len(result) - 5} more")
             return False
         else:
             print(f"\n✅ No duplicates found - merge successful!")
@@ -812,10 +768,7 @@ class ClickHouseAdapter(SQLAdapter):
         
         Example: If partition_by='toYYYYMM(date)' and new data has months [2025-01, 2025-02],
                 it will delete ALL rows in those months and insert the new data.
-        """
-        import pandas as pd
-        from datetime import datetime, date
-        
+        """        
         connection = self.connections.get_thread_connection()
         client = connection.handle
         
@@ -848,7 +801,7 @@ class ClickHouseAdapter(SQLAdapter):
             partition_column = partition_by
         
         if partition_column not in df.columns:
-            raise Exception(f"Partition column '{partition_column}' not found in DataFrame. Available: {df.columns.tolist()}")
+            raise Exception(f"Partition column '{partition_column}' not found in DataFrame.Available: {df.columns.tolist()}")
         
         # Get unique partition values
         unique_partition_values = df[partition_column].unique()
@@ -1006,7 +959,7 @@ class ClickHouseAdapter(SQLAdapter):
             )
         if strategy == 'insert_overwrite' and not partition_by:
             raise DbtRuntimeError(
-                f"'{strategy}' strategy requires non-empty 'partition_by'. Current partition_by is {partition_by}."
+                f"'{strategy}' strategy requires non-empty 'partition_by'.Current partition_by is {partition_by}."
             )
         if strategy == 'insert_overwrite' and unique_key:
             raise DbtRuntimeError(f"'{strategy}' strategy does not support unique_key.")
@@ -1371,8 +1324,8 @@ class ClickHouseAdapter(SQLAdapter):
         for v in raw_columns.values():
             codec = f"CODEC({_codec})" if (_codec := v.get('codec')) else ""
             ttl = f"TTL {ttl}" if (ttl := v.get('ttl')) else ""
-            # Codec and TTL are optional clauses. The adapter should support scenarios where one
-            # or both are omitted. If specified together, the codec clause should appear first.
+            # Codec and TTL are optional clauses.The adapter should support scenarios where one
+            # or both are omitted.If specified together, the codec clause should appear first.
             clauses = " ".join(filter(None, [codec, ttl]))
             rendered_columns.append(
                 f"{quote_identifier(v['name'])} {v['data_type']} {clauses}".rstrip()
